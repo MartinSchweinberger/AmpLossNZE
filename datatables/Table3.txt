@@ -1,0 +1,13 @@
+Age	Gender	very	AdjectiveSlots	veryN
+16-19	Man	very	77	9
+16-19	Woman	very	224	14
+20-29	Man	very	295	39
+20-29	Woman	very	573	56
+30-39	Man	very	67	12
+30-39	Woman	very	136	24
+40-49	Man	very	52	21
+40-49	Woman	very	100	36
+50-59	Man	very	50	26
+50-59	Woman	very	86	52
+60+	Man	very	23	14
+60+	Woman	very	32	16
