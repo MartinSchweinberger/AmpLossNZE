@@ -274,6 +274,77 @@ pd$Variant <- ifelse(pd$Variant == "very", "very",
 pd$pretty <- NULL
 pd$so <- NULL
 pd$other <- ifelse(pd$Amplified == 100 & pd$very == 0 & pd$really == 0, 100, 0)
+
+###############################################################
+# load word counts
+wordcounts <- read.delim("datatables/wordcount.txt", sep = "\t", header = T, skipNul = T) %>%
+  dplyr::filter(grepl("DPC", File) == T)
+p2bd <- dplyr::left_join(wordcounts, ampwsc, by = c("File", "Speaker")) %>%
+  dplyr::select(File, Speaker, Age, Variant, Wordcount, Function) %>%
+  dplyr::mutate(Variant = ifelse(Variant  %in% famps, Variant , "other")) %>%
+  dplyr::mutate(other = ifelse(Variant == "other", 1, 0)) %>%
+  dplyr::mutate(pretty = ifelse(Variant == "pretty", 1, 0)) %>%
+  dplyr::mutate(really =ifelse(Variant == "really", 1, 0)) %>%
+  dplyr::mutate(so =ifelse(Variant == "so", 1, 0)) %>% 
+  dplyr::mutate(very = ifelse(Variant == "very", 1, 0)) %>%
+  dplyr::mutate(zero = ifelse(Variant == "0", 1, 0)) %>%
+  dplyr::select(-Variant) %>%
+  dplyr::group_by(File, Speaker, Function) %>%
+  dplyr::summarise(other = sum(other), pretty = sum(pretty), 
+                   really = sum(really), so = sum(so), 
+                   very = sum(very), zero = sum(zero), 
+                   Wordcount = unique(Wordcount), Age = unique(Age)) %>%
+  na.omit() %>%
+  dplyr::mutate(other = other/Wordcount*1000) %>%
+  dplyr::mutate(pretty = pretty/Wordcount*1000) %>%
+  dplyr::mutate(really = really/Wordcount*1000) %>%
+  dplyr::mutate(so = so/Wordcount*1000) %>%
+  dplyr::mutate(very = very/Wordcount*1000) %>%
+  dplyr::mutate(zero = zero/Wordcount*1000) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-File, -Speaker, -Wordcount) %>%
+  dplyr::mutate(Age = factor(Age), Function = factor(Function))
+p2bd$Age <- ifelse(p2bd$Age == "16-19", 6,
+                 ifelse(p2bd$Age == "20-29", 5,
+                        ifelse(p2bd$Age == "30-39", 4, 
+                               ifelse(p2bd$Age == "40-49", 3, 
+                                      ifelse(p2bd$Age == "50-59", 2, 
+                                             ifelse(p2bd$Age == "60+", 1, p2bd$Age))))))
+p2bd$Age <- as.numeric(p2bd$Age)
+# plot
+p2b <- ggplot(p2bd, aes(x = jitter(Age), y = zero)) +
+  facet_grid(vars(Function)) +
+  geom_smooth(aes(y = other, color = "other", linetype = "other"), se = F, size = .5) +
+  geom_smooth(aes(y = pretty, color = "pretty", linetype = "pretty"), se = F, size = .5) +
+  geom_smooth(aes(y = really, color = "really", linetype = "really"), se = F, size = .5) +
+  geom_smooth(aes(y = so, color = "so", linetype = "so"), se = F, size = .5) +
+  geom_smooth(aes(y = very, color = "very", linetype = "very"), se = F, size = .5) +
+  geom_smooth(aes(y = zero, color = "zero", linetype = "zero"), se = F, size = .5) +
+  guides(color=guide_legend(override.aes=list(fill=NA))) +
+  scale_linetype_manual(values=c("dashed", "dotted", "longdash", "twodash", "solid", "solid"),
+                        name="Variant",
+                        breaks = c("other", "pretty", "really", "so", "very", "zero"), 
+                        labels = c("other", "pretty", "really", "so", "very", "zero")) +
+  scale_colour_manual(values=c("grey20",  "grey20", "grey20",  "grey20", "grey20", "grey80"),
+                      name="Variant", 
+                      breaks=c("other", "pretty", "really", "so", "very", "zero"), 
+                      labels = c("other", "pretty", "really", "so", "very", "zero")) +
+  theme_bw(base_size = 15) +
+  theme(legend.position="top", 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black")) +
+  coord_cartesian(ylim = c(0, 2)) +
+  labs(x = "Age", y = "Relative frequency 
+  of amplifier variants 
+       (per 1,000 words)") +
+  guides(size = FALSE)+
+  guides(alpha = FALSE) +
+  scale_x_discrete(name ="Age", limits = 1:6, labels= agelevels) +
+  ggsave(file = paste(imageDirectory,"Variant_Function_Frequency.png", sep="/"), 
+         width = 15, height = 10, units = c("cm"),  dpi = 320)
+p2b
+
 ###############################################################
 # p3
 p3d <- pd
@@ -310,16 +381,6 @@ p3 <- ggplot(p3d, aes(x = jitter(Age), y = very)) +
   ggsave(file = paste(imageDirectory,"Variant_Function.png",sep="/"), 
          width = 20, height = 10, units = c("cm"),  dpi = 320)
 p3
-
-###############################################################
-# load word counts
-wordcounts <- read.delim("datatables/wordcount.txt", sep = "\t", header = T, skipNul = T)
-wscspeakerinformation <- read.delim("datatables/wscspeakerinformation.txt", sep = "\t", header = T, skipNul = T)
-# combine wordcounts and speakerinformation
-
-
-p3b 
-
 
 ###############################################################
 #               PLOTTING LEXICAL DIVESRITY
