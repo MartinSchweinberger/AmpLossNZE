@@ -1,0 +1,1482 @@
+---
+title: "On the waning of forms - a corpus-based analysis of decline and loss in adjective amplification"
+author: "Anonymous"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  bookdown::html_document2: default
+bibliography: bibliography.bib
+link-citations: yes
+---
+
+This document reports on the analysis of the adjective amplifier very in New Zealand English. The analysis was performed with the aim of fitting a model (generalized-linear binomial logistic mixed-effects regression) to explain which factors correlate with the use of very to ascertain if very is decreasing across apparent time and if this retreat is systematic or layered (which would imply that the use of very is stratified along linguistic and social lines) or unsystematic (which would imply that it correlates with few if any linguistic or social variables). 
+
+If you use this script or results thereof, please cite it as:
+Anonymous, Anonymous. 2019. On the waning of forms - a corpus-based analysis of decline and loss in the New Zealand English amplifier system. 
+
+We will now begin with the analysis. In a first step, the session is prepared by clearing the workspace, setting options, activating packages and functions, as well as loading relevant functions.
+
+```{r verynze_01, echo=T, eval = T, message=FALSE, warning=FALSE}
+# remove all lists from the current workspace
+rm(list=ls(all=T))
+# load libraries
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+# set options
+options(stringsAsFactors = F)
+options(scipen = 999)
+options(max.print=10000)
+# define image directory
+imageDirectory<-"images"
+```
+
+We proceed by loading the data, factorizing cariables that are so far represented as character strings instead of factors, and inspecting its characteristics.
+
+```{r verynze_02, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load data
+verywsc <- read.delim("datatables/ampwsc_regdat.txt", sep = "\t", header = T, skipNul = T)
+# remove superfluous variables
+verywsc <- verywsc %>%
+  dplyr::select(-ID, - FileSpeaker, -Speaker, -File)
+# factorize variables 
+fctr <- c("Adjective", "Ethnicity", "Gender", "Education", "L1", "Age", 
+          "Function", "Priming", "SemanticCategory", "Emotionality", "very")
+verywsc[fctr] <- lapply(verywsc[fctr], factor)
+# inspect data
+nrow(verywsc); str(verywsc); head(verywsc); summary (verywsc)
+
+```
+
+We will now scale numeric variables so that the estimates refer to the mean of the numeric variables rather than their true 0-point. This is neccessary as estimates for adjectives that occur with a frequency of 0 are nonsensical.
+
+```{r verynze_03, echo=T, eval = T, message=FALSE, warning=FALSE}
+# frequency
+summary(verywsc$Frequency)
+
+verywsc$Frequency <- as.vector(scale(verywsc$Frequency))
+summary(verywsc$Frequency)
+```
+
+We plot the scaled variable (Frequency).
+
+```{r verynze_04, echo=T, eval = T, message=FALSE, warning=FALSE}
+plot(verywsc$Frequency, verywsc$very)
+abline(lm(verywsc$very ~ verywsc$Frequency))
+```
+
+We also scale gradability and plot the resulting scaled gradability.
+
+```{r verynze_05, echo=T, eval = T, message=FALSE, warning=FALSE}
+# gradability
+verywsc$Gradability <- as.vector(scale(verywsc$Gradability-1))
+summary(verywsc$Gradability)
+
+plot(verywsc$Gradability, verywsc$very)
+abline(lm(verywsc$very ~ verywsc$Gradability))
+```
+
+We now begin with the modelling. In a first step, we use a Boruta analysis as a variable selection procedure to determine which variables have any sort of meaningful relationship with the dependent variable. We will only consider variables which have been deemed as being important during the model fitting process.
+
+```{r verynze_06, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load library
+library(Boruta)
+# create dada for boruta
+borutadata <- verywsc %>%
+  na.omit()
+# save and load data
+write.table(borutadata, "datatables/borutadata.txt", sep = "\t", 
+            col.names = T, row.names = F, quote = F)
+# run 1
+set.seed(2019121201)
+boruta1 <- Boruta(very ~.,data=borutadata)
+print(boruta1)
+```
+
+As Function is deemed unimportant, we remove it from the analysis and rerun the variable selection procedure.
+
+We now begin with the modelling. In a first step, we use a Boruta analysis as a variable selection procedure to determine which variables have any sort of meaningful relationship with the dependent variable.
+
+```{r verynze_07, echo=T, eval = T, message=FALSE, warning=FALSE}
+rejected <- names(boruta1$finalDecision)[which(boruta1$finalDecision == "Rejected")]
+# update data for boruta
+borutadata <- borutadata %>%
+  dplyr::select(-rejected)
+# run 2
+set.seed(2019121202)
+boruta2 <- Boruta(very ~.,data=borutadata)
+print(boruta2)
+```
+
+We also remove Education as it is deemed only tentatively important and start a 3^rd^ run.
+
+```{r verynze_08, echo=T, eval = T, message=FALSE, warning=FALSE}
+rejected <- names(boruta1$finalDecision)[which(boruta1$finalDecision == "Tentative")]
+# update data for boruta
+borutadata <- borutadata %>%
+  dplyr::select(-rejected)
+# run 3
+set.seed(2019121203)
+boruta3 <- Boruta(very ~.,data=borutadata)
+print(boruta3)
+```
+
+No more variables need to be removed. We now inspect the visualizations of the Boruta analysis. 
+
+```{r verynze_09, echo=T, eval = T, message=FALSE, warning=FALSE}
+png("images/BorutaVeryWsc.png",  width = 1800, height = 300)
+plot(boruta3, cex = .75)
+dev.off()
+plot(boruta3)
+```
+
+In addition, we inspect the history of the Boruta runs. 
+
+```{r verynze_10, echo=T, eval = T, message=FALSE, warning=FALSE}
+png("images/BorutaVeryWsc_History1.png",  width = 680, height = 480)
+plotImpHistory(boruta3)
+dev.off()
+plotImpHistory(boruta3)
+```
+
+Now, we create the final publication visualization of the Boruta analysis. 
+
+```{r verynze_11, echo=T, eval = T, message=FALSE, warning=FALSE}
+png("images/BorutaVeryWsc_final.png",  width = 1500, height = 750)
+par(mar = c(22, 8, 4, 2) + 0.1)
+plot(boruta3, cex.axis=2, las=2, xlab="", ylab = "", cex = 2, 
+     col = c(rep("grey50", 9), rep("grey90",3)))
+abline(v = 3.5, lty = "dashed")
+mtext("Predictors", 1, line = 21, at = 9, cex = 2)
+mtext("Control", 1, line = 21, at = 2, cex = 2)
+mtext("Importance", 2, line = 5, at = 25, cex = 2, las = 0)
+dev.off()
+plot(boruta3, cex.axis=2, las=2, xlab="", ylab = "", cex = 2, 
+     col = c(rep("grey50", 9), rep("grey90",3)))
+abline(v = 3.5, lty = "dashed")
+mtext("Predictors", 1, line = 21, at = 9, cex = 2)
+mtext("Control", 1, line = 21, at = 2, cex = 2)
+mtext("Importance", 2, line = 5, at = 25, cex = 2, las = 0)
+par(mar = c(5, 4, 4, 2) + 0.1)
+```
+
+We begin with the model fitting by setting options and cerating intercept-only base-line models. 
+
+```{r verynze_12, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load library
+library(rms)
+# set options
+options(contrasts  =c("contr.treatment", "contr.poly"))
+verywsc.dist <- datadist(verywsc)
+options(datadist = "verywsc.dist")
+# generate initial minimal regression model 
+m0.glm = glm(very ~ 1, family = binomial, data = verywsc) 
+# inspect results
+summary(m0.glm)
+```
+
+In a next step, we cerate analogous base-line models with Adjective as a random effect (random intercepts). 
+
+```{r verynze_13, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load libraries
+library(lme4)
+library(car)
+# create model with a random intercept for Adjective
+m0.glmer = glmer(very ~ (1|Adjective), data = verywsc, family = binomial)
+```
+
+We can now use the AIC to determine if including a random effect structure is justified. 
+
+```{r verynze_14, echo=T, eval = T, message=FALSE, warning=FALSE}
+aic.glmer <- AIC(logLik(m0.glmer))
+aic.glm <- AIC(logLik(m0.glm))
+aic.glmer; aic.glm
+```
+
+The AIC of the glmer object is substantially smaller which indicates that including the random intercepts appears to be justified. We test this using a Likelihood Ratio test to check if the random effect structure significantly increases the model fit. 
+
+```{r verynze_15, echo=T, eval = T, message=FALSE, warning=FALSE}
+# test random effects
+null.id = -2 * logLik(m0.glm) + 2 * logLik(m0.glmer)
+pchisq(as.numeric(null.id), df=1, lower.tail=F) 
+```
+
+Both the AIC and the Likelihood Ratio test confirm that including a random effect structure is justified. We can now start with the model fitting using a step-wise step-up procedure. The cut-off value for collinearity among main effects is 5 and 30 for interactions. We continue by specifying the optimizer and adding a first fixed predictor (Age).
+
+```{r verynze_16, echo=T, eval = T, message=FALSE, warning=FALSE}
+#	manual modelfitting
+m0.glmer <- glmer(very ~ 1 + (1|Adjective), family = binomial, data = verywsc, 
+                  control=glmerControl(optimizer="bobyqa"))
+# add Age
+ifelse(min(ftable(verywsc$Age, verywsc$very)) == 0, "not possible", "possible")
+m1.glm <- update(m0.glm, .~.+Age)
+m1.glmer <- update(m0.glmer, .~.+Age)
+anova(m0.glmer, m1.glmer, test = "Chi")
+Anova(m1.glmer, type = "III", test = "Chi")
+```
+
+Including Age significantly improves the model fit whih is why we retain it in the model and continue by adding Frequency.
+
+```{r verynze_17, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency
+m2.glm <- update(m1.glm, .~.+Frequency)
+max(vif(m2.glm)[,1])         
+m2.glmer <- update(m1.glmer, .~.+Frequency)
+anova(m2.glmer, m1.glmer, test = "Chi")  
+```
+
+Including Frequency does not cause excessive vifs but also does not significantly improve the model fit which is why we do not retain it in the model and continue by adding Emotionality.
+
+```{r verynze_18a, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality
+ifelse(min(ftable(verywsc$Emotionality, verywsc$very)) == 0, "not possible", "possible")
+m3.glm <- update(m1.glm, .~.+Emotionality)
+max(vif(m3.glm)[,1])                                     
+m3.glmer <- update(m1.glmer, .~.+Emotionality)
+anova(m3.glmer, m1.glmer, test = "Chi")              
+Anova(m3.glmer, type = "III", test = "Chi")        
+```
+
+Including Emotionality does not cause excessive vifs and  significantly improves the model fit which is why we retain it in the model. We continue by adding Ethnicity.
+
+```{r verynze_18a, echo=T, eval = T, message=FALSE, warning=FALSE}
+library(sjPlot)
+tab_model(m0.glmer, m3.glmer)
+```
+
+
+```{r verynze_19, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity
+ifelse(min(ftable(verywsc$Ethnicity, verywsc$very)) == 0, "not possible", "possible")
+m4.glm <- update(m3.glm, .~.+Ethnicity)
+max(vif(m4.glm)[,1])                        
+m4.glmer <- update(m3.glmer, .~.+Ethnicity)
+anova(m4.glmer, m3.glmer, test = "Chi")       
+```
+
+Including Ethnicity does not cause excessive vifs but does not significantly improve the model fit which is why we do not retain it in the model and continue by adding SemanticCategory.
+
+```{r verynze_20, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory
+ifelse(min(ftable(verywsc$SemanticCategory, verywsc$very)) == 0, "not possible", "possible")
+m5.glm <- update(m3.glm, .~.+SemanticCategory)
+max(vif(m5.glm)[,1])               
+m5.glmer <- update(m3.glmer, .~.+SemanticCategory)
+anova(m5.glmer, m3.glmer, test = "Chi")   
+Anova(m5.glmer, type = "III", test = "Chi")      
+```
+
+Including SemanticCategory does not cause excessive vifs but it does not improve the model fit which is why we do not retain it in the model and continue by adding Gradability.
+
+```{r verynze_21, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability
+m6.glm <- update(m3.glm, .~.+Gradability)
+max(vif(m6.glm)[,1])                       
+m6.glmer <- update(m3.glmer, .~.+Gradability)
+anova(m6.glmer, m3.glmer, test = "Chi")    
+Anova(m6.glmer, type = "III", test = "Chi")  
+```
+
+Including Gradability does not cause excessive vifs but is only marginally improves the model fit which is why we do not retain it in the model and continue by adding Priming.
+
+```{r verynze_22, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Priming
+ifelse(min(ftable(verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+m7.glm <- update(m3.glm, .~.+Priming)
+max(vif(m7.glm)[,1])                  
+m7.glmer <- update(m3.glmer, .~.+Priming)
+anova(m7.glmer, m3.glmer, test = "Chi")  
+```
+
+Including Priming does not cause excessive vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding L1.
+
+```{r verynze_23, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add L1
+ifelse(min(ftable(verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+m8.glm <- update(m3.glm, .~.+L1)
+max(vif(m8.glm)[,1])                    
+m8.glmer <- update(m3.glmer, .~.+L1)
+anova(m8.glmer, m3.glmer, test = "Chi")   
+```
+
+Including L1 does not cause excessive vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by checking all possible second-order interactions.
+
+```{r verynze_24, echo=T, eval = T, message=FALSE, warning=FALSE}
+# find all 2-way interactions
+library(utils)
+#colnames(verywsc) # remove # to activate
+vars <- c("Age", "Emotionality", "SemanticCategory", "Frequency", 
+          "Gradability", "Ethnicity", "Priming", "L1")
+intac <- t(combn(vars, 2))
+intac
+```
+
+We continue by adding the interaction between Age and Frequency.
+
+```{r verynze_25, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Emotionality
+ifelse(min(ftable(verywsc$Age, verywsc$Emotionality, verywsc$very)) == 0, "not possible", "possible")
+m9.glm <- update(m3.glm, .~.+Age * Emotionality)
+vif(m9.glm)                    
+```
+
+Including the interaction between Age and Emotionality causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between Age and SemanticCategory.
+
+```{r verynze_26, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * SemanticCategory
+ifelse(min(ftable(verywsc$Age, verywsc$SemanticCategory, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and SemanticCategory is not possible as this would ential that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Frequency.
+
+```{r verynze_27, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Frequency
+m11.glm <- update(m3.glm, .~.+Age * Frequency)
+vif(m11.glm)    
+m11.glmer <- update(m3.glmer, .~.+Age * Frequency)
+anova(m11.glmer, m3.glmer, test = "Chi") 
+```
+
+Including the interaction between Age and Frequency causes high but acceptable vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Age and Gradability.
+
+```{r verynze_28, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Gradability
+ifelse(min(ftable(verywsc$Age, verywsc$Gradability, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and Gradability is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Ethnicity.
+
+```{r verynze_29, echo=T, eval = F, message=FALSE, warning=FALSE}
+# add Age * Ethnicity
+ifelse(min(ftable(verywsc$Age, verywsc$Ethnicity, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and Ethnicity is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Priming
+
+```{r verynze_30, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Priming
+ifelse(min(ftable(verywsc$Age, verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+m14.glm <- update(m3.glm, .~.+Age * Priming)
+vif(m14.glm)                                      
+m14.glmer <- update(m3.glmer, .~.+Age * Priming)
+anova(m14.glmer, m3.glmer, test = "Chi")    
+```
+
+Including the interaction between Age and Priming causes very high vifs but it significantly improves the model fit. However, it also causes a substantial BIC inflation which is why we do not retain it in the model and continue by adding the interaction between Age and L1.
+
+```{r verynze_31, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * L1
+ifelse(min(ftable(verywsc$Age, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Emotionality and SemanticCategory.
+
+```{r verynze_32, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * SemanticCategory
+ifelse(min(ftable(verywsc$Emotionality, verywsc$SemanticCategory, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Emotionality and SemanticCategory is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Emotionality and Frequency.
+
+```{r verynze_33, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Frequency
+m17.glm <- update(m3.glm, .~.+Emotionality * Frequency)
+vif(m17.glm)                   
+```
+
+Including the interaction between Emotionality and Frequency causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Gradability.
+
+```{r verynze_34, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Gradability
+m18.glm <- update(m3.glm, .~.+ Emotionality * Gradability)
+vif(m18.glm)
+m18.glmer <- update(m3.glmer, .~.+ Emotionality * Gradability)
+anova(m18.glmer, m3.glmer, test = "Chi")        
+```
+
+Including the interaction between Emotionality and Gradability causes a slight  vif increase and it significantly improves the model fit. However, it also causes a substantial BIC incerase which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Ethnicity
+
+```{r verynze_35, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Ethnicity
+ifelse(min(ftable(verywsc$Emotionality, verywsc$Ethnicity, verywsc$very)) == 0, "not possible", "possible")
+m19.glm <- update(m3.glm, .~.+Emotionality * Ethnicity)
+vif(m19.glm)
+```
+
+Including the interaction between Emotionality and Ethnicity causes unacceptable vifs which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Priming.
+
+```{r verynze_36, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Priming
+ifelse(min(ftable(verywsc$Emotionality, verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+m20.glm <- update(m3.glm, .~.+Emotionality * Priming)
+vif(m20.glm)                           
+m20.glmer <- update(m3.glmer, .~.+Emotionality * Priming)
+anova(m20.glmer, m3.glmer, test = "Chi")   
+```
+
+Including the interaction between Emotionality and Priming causes a slight vif incerase and it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Emotionality and L1.
+
+```{r verynze_37, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * L1 
+ifelse(min(ftable(verywsc$Emotionality, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+m21.glm <- update(m3.glm, .~.+Emotionality * L1)
+vif(m21.glm)
+m21.glmer <- update(m3.glmer, .~.+Emotionality * L1)
+anova(m21.glmer, m3.glmer, test = "Chi")                     
+```
+
+Including the interaction between Emotionality and Priming causes high vifs and it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Frequency.
+
+```{r verynze_38, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Frequency  
+m22.glm <- update(m3.glm, .~.+SemanticCategory * Frequency)
+vif(m22.glm)
+```
+
+Including the interaction between SemanticCategory and Frequency causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Gradability.
+
+```{r verynze_39, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Gradability 
+m23.glm <- update(m3.glm, .~.+SemanticCategory * Gradability)
+vif(m23.glm)
+```
+
+Including the interaction between SemanticCategory and Gradability causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Ethnicity
+
+```{r verynze_40, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Ethnicity 
+ifelse(min(ftable(verywsc$SemanticCategory, verywsc$Ethnicity, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and Ethnicity is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between SemanticCategory and Priming.
+
+```{r verynze_41, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Priming 
+ifelse(min(ftable(verywsc$SemanticCategory, verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and Priming is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between SemanticCategory and L1.
+
+```{r verynze_42, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * L1 
+ifelse(min(ftable(verywsc$SemanticCategory, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Frequency and Gradability.
+
+```{r verynze_43, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Gradability 
+m27.glm <- update(m3.glm, .~.+ Frequency * Gradability)
+vif(m27.glm)  
+m27.glmer <- update(m3.glmer, .~.+ Frequency * Gradability)
+anova(m27.glmer, m3.glmer, test = "Chi")     
+```
+
+Including the interaction between Frequency and Gradability does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and Ethnicity.
+
+```{r verynze_44, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Ethnicity 
+m28.glm <- update(m3.glm, .~.+Frequency * Ethnicity)
+vif(m28.glm)
+m28.glmer <- update(m3.glmer, .~.+Frequency * Ethnicity)
+anova(m28.glmer, m3.glmer, test = "Chi")       
+```
+
+Including the interaction between Frequency and Ethnicity does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and Priming.
+
+```{r verynze_45, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Priming  
+m29.glm <- update(m3.glm, .~.+Frequency * Priming)
+vif(m29.glm)
+m29.glmer <- update(m3.glmer, .~.+Frequency * Priming)
+anova(m29.glmer, m3.glmer, test = "Chi")  
+```
+
+Including the interaction between Frequency and Priming does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and L1.
+
+```{r verynze_46, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * L1   
+m30.glm <- update(m3.glm, .~.+Frequency * L1)
+vif(m30.glm)
+m30.glmer <- update(m3.glmer, .~.+Frequency * L1)
+anova(m30.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Frequency and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Gradability and Ethnicity.
+
+```{r verynze_47, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * Ethnicity   
+m31.glm <- update(m3.glm, .~.+ Gradability * Ethnicity)
+vif(m31.glm)
+m31.glmer <- update(m3.glmer, .~.+ Gradability * Ethnicity)
+anova(m31.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Gradability and Ethnicity does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Gradability and Priming.
+
+```{r verynze_48, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * Priming   
+ifelse(min(ftable(verywsc$Gradability, verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Gradability and Priming is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Gradability and L1.
+
+```{r verynze_49, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * L1   
+ifelse(min(ftable(verywsc$Gradability, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Gradability and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Ethnicity and Priming.
+
+```{r verynze_50, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity * Priming  
+ifelse(min(ftable(verywsc$Ethnicity, verywsc$Priming, verywsc$very)) == 0, "not possible", "possible")
+m34.glm <- update(m3.glm, .~.+Ethnicity * Priming)
+vif(m34.glm)
+m34.glmer <- update(m3.glmer, .~.+Ethnicity * Priming)
+anova(m34.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Ethnicity and Priming does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Ethnicity and L1.
+
+```{r verynze_51, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity * L1  
+ifelse(min(ftable(verywsc$Ethnicity, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+m35.glm <- update(m3.glm, .~.+Ethnicity * L1)
+vif(m35.glm)                                 
+m35.glmer <- update(m3.glmer, .~.+Ethnicity * L1)
+anova(m35.glmer, m3.glmer, test = "Chi")  
+```
+
+Including the interaction between Ethnicity and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Priming and L1.
+
+```{r verynze_52, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Priming * L1  
+ifelse(min(ftable(verywsc$Priming, verywsc$L1, verywsc$very)) == 0, "not possible", "possible")
+m36.glm <- update(m3.glm, .~.+Priming * L1)
+vif(m36.glm)      
+m36.glmer <- update(m3.glmer, .~.+Priming * L1)
+anova(m36.glmer, m3.glmer, test = "Chi")             
+```
+
+Including the interaction between Priming and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model. We have arrived at a first minimal adequate model and we can now diagnose the mdoel and test if we need to remove data points.
+
+We begin the diagnostics with visualizing residuals.
+
+```{r verynze_53, echo=T, eval = T, message=FALSE, warning=FALSE}
+par(mfrow = c(1, 4))   # display plots in 3 rows and 2 columns
+plot(m3.glmer, col = "black", pch = 20); par(mfrow = c(1, 1))
+```
+
+We now plot Cook's distance to check if we need to remove data points and include a data-driven cutoff threshold (which is likely too low).
+
+```{r verynze_54, echo=T, eval = T, message=FALSE, warning=FALSE}
+# determine a cutoff for data points that have D-values higher than 4/(n-k-1) 
+cutoff <- 4/((nrow(verywsc)-length(coefficients(m3.glm)-2)))
+# plot cook*s distance
+plot(m3.glm, which=4, cook.levels = cutoff) 
+abline(h = cutoff, col = "red", lty = "dotted")
+```
+
+The Cook's distance plot shows that at least the three named data points (and three high but unnamed data points) should be removed and that the data-driven cutoff threshold was indeed to low. Thus, we adapt the cutoff manually to 0.007.
+
+We continue the diagnostics using the glm model and visualizing its residuals.
+
+```{r verynze_56, echo=T, eval = T, message=FALSE, warning=FALSE}
+cutoff <- 0.007 
+# start plotting
+par(mfrow = c(1, 4)) 
+plot(m3.glm); par(mfrow = c(1, 4))
+```
+
+The diagnostics show that the data do not fit the assumptions of the model very well but there is not much we can do except removing outliers. We will do this and rerun the analysis.
+
+```{r verynze_57, echo=T, eval = T, message=FALSE, warning=FALSE}
+verywsc$cooksdistance <- cooks.distance(m3.glm)
+verywscnew <- verywsc[-(which(verywsc$cooksdistance > cutoff)),]
+# save new data set to disc
+write.table(verywscnew, "datatables/verywscnew.txt", row.names= F, sep = "\t")
+nrow(verywsc); nrow(verywscnew)
+```
+
+We have now deleted the three outliers but we will check if other points lie outside if the maually adapted cutoff.
+
+```{r verynze_58, echo=T, eval = T, message=FALSE, warning=FALSE}
+(which(verywscnew$cooksdistance > cutoff))
+```
+
+There are no more data points with Cook's diance values above the cutoff in the data. 
+
+We begin the rerun of the model fitting by setting options and creating intercept-only base-line models. 
+
+```{r verynze_59, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load library
+library(rms)
+# set options
+options(contrasts  =c("contr.treatment", "contr.poly"))
+verywsc.dist <- datadist(verywscnew)
+options(datadist = "verywsc.dist")
+# generate initial minimal regression model 
+m0.glm = glm(very ~ 1, family = binomial, data = verywscnew)
+# inspect results
+summary(m0.glm)
+```
+
+In a next step, we cerate analogous base-line models with Adjective as a random effect (random intercepts). 
+
+```{r verynze_60, echo=T, eval = T, message=FALSE, warning=FALSE}
+# create model with a random intercept for Adjective
+m0.glmer = glmer(very ~ (1|Adjective), data = verywscnew, family = binomial)
+```
+
+We can now use the AIC to determine if including a random effect structure is justified. 
+
+```{r verynze_61, echo=T, eval = T, message=FALSE, warning=FALSE}
+aic.glmer <- AIC(logLik(m0.glmer))
+aic.glm <- AIC(logLik(m0.glm))
+aic.glmer; aic.glm
+```
+
+The AIC of the glmer object is substantially smaller which indicates that including the random intercepts appears to be justified. We test this using a Likelihood Ratio test to check if the random effect structure significantly increases the model fit. 
+
+```{r verynze_62, echo=T, eval = T, message=FALSE, warning=FALSE}
+# test random effects
+null.id = -2 * logLik(m0.glm) + 2 * logLik(m0.glmer)
+pchisq(as.numeric(null.id), df=1, lower.tail=F) 
+```
+
+Both the AIC and the Likelihood Ratio test confirm that including a random effect structure is justified. We can now start with the model fitting using a step-wise step-up procedure. The cut-off value for collinearity among main effects is 5 and 30 for interactions. We continue by specifying the optimizer and adding a first fixed predictor (Age).
+
+```{r verynze_63, echo=T, eval = T, message=FALSE, warning=FALSE}
+#	manual modelfitting
+m0.glmer <- glmer(very ~ 1 + (1|Adjective), family = binomial, 
+                  data = verywscnew, 
+                  control=glmerControl(optimizer="bobyqa"))
+# add Age
+ifelse(min(ftable(verywscnew$Age, verywscnew$very)) == 0, "not possible", "possible")
+m1.glm <- update(m0.glm, .~.+Age)
+m1.glmer <- update(m0.glmer, .~.+Age)
+anova(m0.glmer, m1.glmer, test = "Chi")
+Anova(m1.glmer, type = "III", test = "Chi")
+```
+
+Including Age significantly improves the model fit whih is why we retain it in the model and continue by adding Frequency.
+
+```{r verynze_64, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency
+m2.glm <- update(m1.glm, .~.+ Frequency)
+max(vif(m2.glm)[,1])         
+m2.glmer <- update(m1.glmer, .~.+ Frequency)
+anova(m2.glmer, m1.glmer, test = "Chi")  
+```
+
+Including Frequency does not cause excessive vifs but also does not significantly improve the model fit which is why we do not retain it in the model and continue by adding Emotionality.
+
+```{r verynze_65, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality
+ifelse(min(ftable(verywscnew$Emotionality, verywscnew$very)) == 0, "not possible", "possible")
+m3.glm <- update(m1.glm, .~.+Emotionality)
+max(vif(m3.glm)[,1])                                     
+m3.glmer <- update(m1.glmer, .~.+Emotionality)
+anova(m3.glmer, m1.glmer, test = "Chi")              
+Anova(m3.glmer, type = "III", test = "Chi")        
+```
+
+Including Emotionality does not cause excessive vifs and significantly improves the model fit which is why we retain it in the model and continue by adding Ethnicity.
+
+```{r verynze_66, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity
+ifelse(min(ftable(verywscnew$Ethnicity, verywscnew$very)) == 0, "not possible", "possible")
+m4.glm <- update(m3.glm, .~.+Ethnicity)
+max(vif(m4.glm)[,1])                        
+m4.glmer <- update(m3.glmer, .~.+Ethnicity)
+anova(m4.glmer, m3.glmer, test = "Chi")       
+```
+
+Including Ethnicity does not cause excessive vifs but does not significantly improve the model fit which is why we do not retain it in the model and continue by adding SemanticCategory.
+
+```{r verynze_67, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory
+ifelse(min(ftable(verywscnew$SemanticCategory, verywscnew$very)) == 0, "not possible", "possible")
+m5.glm <- update(m3.glm, .~.+SemanticCategory)
+max(vif(m5.glm)[,1])               
+m5.glmer <- update(m3.glmer, .~.+SemanticCategory)
+anova(m5.glmer, m3.glmer, test = "Chi")       
+```
+
+Including SemanticCategory does not cause excessive vifs but it does not improve the model fit which is why we do not retain it in the model and continue by adding Gradability.
+
+```{r verynze_68, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability
+m6.glm <- update(m3.glm, .~.+Gradability)
+max(vif(m6.glm)[,1])                       
+m6.glmer <- update(m3.glmer, .~.+Gradability)
+anova(m6.glmer, m3.glmer, test = "Chi")    
+Anova(m6.glmer, type = "III", test = "Chi")  
+```
+
+Including Gradability does not cause excessive vifs but is only marginally improves the model fit which is why we do not retain it in the model and continue by adding Priming.
+
+```{r verynze_69, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Priming
+ifelse(min(ftable(verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+m7.glm <- update(m3.glm, .~.+Priming)
+max(vif(m7.glm)[,1])                  
+m7.glmer <- update(m3.glmer, .~.+Priming)
+anova(m7.glmer, m3.glmer, test = "Chi")  
+```
+
+Including Priming does not cause excessive vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding L1.
+
+```{r verynze_70, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add L1
+ifelse(min(ftable(verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+m8.glm <- update(m3.glm, .~.+L1)
+max(vif(m8.glm)[,1])                    
+m8.glmer <- update(m3.glmer, .~.+L1)
+anova(m8.glmer, m3.glmer, test = "Chi")   
+```
+
+Including L1 does not cause excessive vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by checking all possible second-order interactions.
+
+```{r verynze_71, echo=T, eval = T, message=FALSE, warning=FALSE}
+# find all 2-way interactions
+library(utils)
+#colnames(verywscnew) # remove # to activate
+vars <- c("Age", "Emotionality", "SemanticCategory", "Frequency", 
+          "Gradability", "Ethnicity", "Priming", "L1")
+intac <- t(combn(vars, 2))
+intac
+```
+
+We continue by adding the interaction between Age and Frequency.
+
+```{r verynze_72, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Emotionality
+ifelse(min(ftable(verywscnew$Age, verywscnew$Emotionality, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and Emotionality is not possible as this would ential that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and SemanticCategory.
+
+```{r verynze_73, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * SemanticCategory
+ifelse(min(ftable(verywscnew$Age, verywscnew$SemanticCategory, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and SemanticCategory is not possible as this would ential that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Frequency.
+
+```{r verynze_74, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Frequency
+m11.glm <- update(m3.glm, .~.+Age * Frequency)
+vif(m11.glm)    
+m11.glmer <- update(m3.glmer, .~.+Age * Frequency)
+anova(m11.glmer, m3.glmer, test = "Chi")
+Anova(m11.glmer, test = "Chi")
+```
+
+Including the interaction between Age and Frequency causes high but acceptable vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Age and Gradability.
+
+```{r verynze_75, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Gradability
+ifelse(min(ftable(verywscnew$Age, verywscnew$Gradability, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and Gradability is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Ethnicity.
+
+```{r verynze_76, echo=T, eval = F, message=FALSE, warning=FALSE}
+# add Age * Ethnicity
+ifelse(min(ftable(verywscnew$Age, verywscnew$Ethnicity, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and Ethnicity is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Age and Priming
+
+```{r verynze_77, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * Priming
+ifelse(min(ftable(verywscnew$Age, verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+m14.glm <- update(m3.glm, .~.+Age * Priming)
+vif(m14.glm)                                      
+m14.glmer <- update(m3.glmer, .~.+Age * Priming)
+anova(m14.glmer, m3.glmer, test = "Chi")    
+```
+
+Including the interaction between Age and Priming causes very high vifs but it significantly improves the model fit. However, it also causes a substantial BIC inflation which is why we do not retain it in the model and continue by adding the interaction between Age and L1.
+
+```{r verynze_78, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Age * L1
+ifelse(min(ftable(verywscnew$Age, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Age and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Emotionality and SemanticCategory.
+
+```{r verynze_79, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * SemanticCategory
+ifelse(min(ftable(verywscnew$Emotionality, verywscnew$SemanticCategory, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Emotionality and SemanticCategory is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Emotionality and Frequency.
+
+```{r verynze_80, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Frequency
+m17.glm <- update(m3.glm, .~.+Emotionality * Frequency)
+vif(m17.glm)                   
+```
+
+Including the interaction between Emotionality and Frequency causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Gradability.
+
+```{r verynze_81, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Gradability
+m18.glm <- update(m3.glm, .~.+ Emotionality * Gradability)
+vif(m18.glm)
+m18.glmer <- update(m3.glmer, .~.+ Emotionality * Gradability)
+anova(m18.glmer, m3.glmer, test = "Chi")        
+```
+
+Including the interaction between Emotionality and Gradability causes a slight  vif increase and it significantly improves the model fit. However, it also causes a substantial BIC increase which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Ethnicity
+
+```{r verynze_82, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Ethnicity
+ifelse(min(ftable(verywscnew$Emotionality, verywscnew$Ethnicity, verywscnew$very)) == 0, "not possible", "possible")
+m19.glm <- update(m3.glm, .~.+Emotionality * Ethnicity)
+vif(m19.glm)
+```
+
+Including the interaction between Emotionality and Ethnicity causes unacceptable vifs which is why we do not retain it in the model and continue by adding the interaction between Emotionality and Priming.
+
+```{r verynze_83, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * Priming
+ifelse(min(ftable(verywscnew$Emotionality, verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+m20.glm <- update(m3.glm, .~.+Emotionality * Priming)
+vif(m20.glm)                           
+m20.glmer <- update(m3.glmer, .~.+Emotionality * Priming)
+anova(m20.glmer, m3.glmer, test = "Chi")   
+```
+
+Including the interaction between Emotionality and Priming causes a slight vif incerase and it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Emotionality and L1.
+
+```{r verynze_84, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Emotionality * L1 
+ifelse(min(ftable(verywscnew$Emotionality, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+m21.glm <- update(m3.glm, .~.+Emotionality * L1)
+vif(m21.glm)
+```
+
+Including the interaction between Emotionality and Priming causes high vifs and it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Frequency.
+
+```{r verynze_85, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Frequency  
+m22.glm <- update(m3.glm, .~.+SemanticCategory * Frequency)
+vif(m22.glm)
+```
+
+Including the interaction between SemanticCategory and Frequency causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Gradability.
+
+```{r verynze_86, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Gradability 
+m23.glm <- update(m3.glm, .~.+SemanticCategory * Gradability)
+vif(m23.glm)
+```
+
+Including the interaction between SemanticCategory and Gradability causes excessive vifs which is why we do not retain it in the model and continue by adding the interaction between SemanticCategory and Ethnicity
+
+```{r verynze_87, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Ethnicity 
+ifelse(min(ftable(verywscnew$SemanticCategory, verywscnew$Ethnicity, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and Ethnicity is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between SemanticCategory and Priming.
+
+```{r verynze_88, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * Priming 
+ifelse(min(ftable(verywscnew$SemanticCategory, verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and Priming is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between SemanticCategory and L1.
+
+```{r verynze_89, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add SemanticCategory * L1 
+ifelse(min(ftable(verywscnew$SemanticCategory, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between SemanticCategory and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Frequency and Gradability.
+
+```{r verynze_90, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Gradability 
+m27.glm <- update(m3.glm, .~.+ Frequency * Gradability)
+vif(m27.glm)  
+m27.glmer <- update(m3.glmer, .~.+ Frequency * Gradability)
+anova(m27.glmer, m3.glmer, test = "Chi")     
+```
+
+Including the interaction between Frequency and Gradability does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and Ethnicity.
+
+```{r verynze_91, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Ethnicity 
+m28.glm <- update(m3.glm, .~.+Frequency * Ethnicity)
+vif(m28.glm)
+m28.glmer <- update(m3.glmer, .~.+Frequency * Ethnicity)
+anova(m28.glmer, m3.glmer, test = "Chi")       
+```
+
+Including the interaction between Frequency and Ethnicity does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and Priming.
+
+```{r verynze_92, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * Priming  
+m29.glm <- update(m3.glm, .~.+Frequency * Priming)
+vif(m29.glm)
+m29.glmer <- update(m3.glmer, .~.+Frequency * Priming)
+anova(m29.glmer, m3.glmer, test = "Chi")  
+```
+
+Including the interaction between Frequency and Priming does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Frequency and L1.
+
+```{r verynze_93, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Frequency * L1   
+m30.glm <- update(m3.glm, .~.+Frequency * L1)
+vif(m30.glm)
+m30.glmer <- update(m3.glmer, .~.+Frequency * L1)
+anova(m30.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Frequency and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Gradability and Ethnicity.
+
+```{r verynze_94, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * Ethnicity   
+m31.glm <- update(m3.glm, .~.+ Gradability * Ethnicity)
+vif(m31.glm)
+m31.glmer <- update(m3.glmer, .~.+ Gradability * Ethnicity)
+anova(m31.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Gradability and Ethnicity does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Gradability and Priming.
+
+```{r verynze_95, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * Priming   
+ifelse(min(ftable(verywscnew$Gradability, verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Gradability and Priming is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Gradability and L1.
+
+```{r verynze_96, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Gradability * L1   
+ifelse(min(ftable(verywscnew$Gradability, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+```
+
+Including the interaction between Gradability and L1 is not possible as this would entail that the model is based on incomplete information [@field2012discovering, 322]. We continue by adding the interaction between Ethnicity and Priming.
+
+```{r verynze_97, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity * Priming  
+ifelse(min(ftable(verywscnew$Ethnicity, verywscnew$Priming, verywscnew$very)) == 0, "not possible", "possible")
+m34.glm <- update(m3.glm, .~.+Ethnicity * Priming)
+vif(m34.glm)
+m34.glmer <- update(m3.glmer, .~.+Ethnicity * Priming)
+anova(m34.glmer, m3.glmer, test = "Chi")
+```
+
+Including the interaction between Ethnicity and Priming does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Ethnicity and L1.
+
+```{r verynze_98, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Ethnicity * L1  
+ifelse(min(ftable(verywscnew$Ethnicity, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+m35.glm <- update(m3.glm, .~.+Ethnicity * L1)
+vif(m35.glm)                                 
+m35.glmer <- update(m3.glmer, .~.+Ethnicity * L1)
+anova(m35.glmer, m3.glmer, test = "Chi")  
+```
+
+Including the interaction between Ethnicity and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model and continue by adding the interaction between Priming and L1.
+
+```{r verynze_99, echo=T, eval = T, message=FALSE, warning=FALSE}
+# add Priming * L1  
+ifelse(min(ftable(verywscnew$Priming, verywscnew$L1, verywscnew$very)) == 0, "not possible", "possible")
+m36.glm <- update(m3.glm, .~.+Priming * L1)
+vif(m36.glm)      
+m36.glmer <- update(m3.glmer, .~.+Priming * L1)
+anova(m36.glmer, m3.glmer, test = "Chi")             
+```
+
+Including the interaction between Priming and L1 does not cause high vifs but it does not significantly improve the model fit which is why we do not retain it in the model. We have arrived at a first minimal adequate model and we can now diagnose the model and test if we need to remove data points.
+
+We begin the diagnostics with visualizing residuals.
+
+```{r verynze_100, echo=T, eval = T, message=FALSE, warning=FALSE}
+par(mfrow = c(1, 4))   # display plots in 3 rows and 2 columns
+plot(m3.glmer, col = "black", pch = 20); par(mfrow = c(1, 1))
+```
+
+The residuals are symetrical and do not exhibit a funnel shape which is good. We now plot Cook's distance to check if we need to remove data points and include a data-driven cutoff threshold (which is likely too low).
+
+```{r verynze_101, echo=T, eval = T, message=FALSE, warning=FALSE}
+# determine a cutoff for data points that have D-values higher than 4/(n-k-1) 
+cutoff <- 4/((nrow(verywscnew)-length(coefficients(m3.glm)-2)))
+# plot cook*s distance
+plot(m3.glm, which=4, cook.levels = cutoff) 
+abline(h = cutoff, col = "red", lty = "dotted")
+```
+
+The Cook's distance plot looks a lot better and the data points are distributed much more evenly.
+
+We continue the diagnostics using the glm model and visualizing its residuals.
+
+```{r verynze_102, echo=T, eval = T, message=FALSE, warning=FALSE}
+# start plotting
+par(mfrow = c(1, 4)) 
+plot(m3.glm); par(mfrow = c(1, 4))
+```
+
+The diagnostics show that the data still do not fit the assumptions of the model very well but the situation has improved but we have to accept this as there is not much we can do. Also, the plot does not take the random effect structure into account which is like to have a very positive impact on the fit as the random intercepts by Adjective explained a significant and substantial amount of variance. We will now perform a power analysis to check if the sample size was sufficient to arrive at robust conclusions.
+
+```{r verynze_103, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load package
+library(simr)
+# restructure data
+pverywscnew <- verywscnew %>%
+  dplyr::select(Age, Emotionality, Adjective, very) %>%
+  dplyr::mutate(other = ifelse(very == "very", 0, 1)) %>%
+  dplyr::mutate(very = ifelse(very == "very", 1, 0)) %>%
+  dplyr::group_by(Age, Emotionality, Adjective) %>%
+  dplyr::summarise(very = sum(very), other = sum(other))
+# redo model
+gm1 <- glmer(cbind(very, other) ~ Age + Emotionality + (1 | Adjective), 
+             data = pverywscnew, family = binomial, 
+             control = glmerControl(optimizer="bobyqa", 
+                                    optCtrl = list(maxIter = 100)))
+# set seed for replicability
+set.seed(2019121201)
+# calculate power for Age
+powerSim(gm1, fixed("Age", "lr"), nsim=100)
+```
+
+The power analysis confrims that the sample size is not only sufficient but even excessive and would have detected an effect the size of age in 100 percent of cases (lower ci 96.38, higher ci 100). The target is merely a standard of 80 percent in clinical trials!
+
+```{r verynze_104, echo=T, eval = T, message=FALSE, warning=FALSE}
+# set seed for replicability
+set.seed(2019121202)
+# calculate power for Emotionality
+powerSim(gm1, fixed("Emotionality", "lr"), nsim=100)
+```
+
+The power analysis confrims that the sample size is not only sufficient but even excessive and would have detected an effect the size of age in 100 percent of cases (lower ci 96.38, higher ci 100). The target is merely a standard of 80 percent in clinical trials!
+
+We will now check if the sample size is sufficient to detect a small effect (Cohen's d 0.2) - the traditional scale is 0.2 for a small, 0.5 for medium sized, and 0.8 for a large or strong effect. 
+
+To test this, we check if the sample size of the model is sufficient to find a small effect. In order to check what a small effect is, we need to determine the odds ratios of the fixed effects and then convert them into Cohen's d values for which we have associations between traditional denominations (small, medium, and large) and effect sife values. According to @chen2010big odds ratios of 1.68, 3.47, and 6.71 are equivalent to Cohen's d = 0.2 (small), 0.5 (medium), and 0.8 (large).
+
+```{r verynze_105, echo=T, eval = T, message=FALSE, warning=FALSE}
+estimatesfixedeffects <- fixef(gm1)
+exp(estimatesfixedeffects)
+```
+
+We will now change the size of the effect of Age20-29 to make it "small", i.e. on the brink of being noise but being just strong enough to be considered small. In other words, we will set the effect so that its odds ratio is exactly 1.68.
+
+```{r verynze_106, echo=T, eval = T, message=FALSE, warning=FALSE}
+fixef(gm1)["Age20-29"] <- 0.519
+estimatesfixedeffects <- fixef(gm1)
+exp(estimatesfixedeffects)
+```
+
+A small effect size would be equivalent to an estimate of 0.519.
+
+We have now defined the effect size of Age20-29 to be the smallest meaningful effect. We can now test, if the model is powerful enough to detect this small effect with a likelihood high than 80 percent.
+
+```{r verynze_107, echo=T, eval = T, message=FALSE, warning=FALSE}
+# set seed for replicability
+set.seed(2019121202)
+fixef(gm1)["Age20-29"] <- 0.519
+powerSim(gm1, fixed("Age20-29", "z"), nsim=100)
+```
+
+Based on the sample size of the present study, the model would find a small effect only in 46 percent of cases. We will now check with which accuracy the model would find a medium effect (odds ratio of 3.47 or Cohen's d of .5). To do this, we again set set the effect size to the desired medium effect.
+
+```{r verynze_108, echo=T, eval = T, message=FALSE, warning=FALSE}
+fixef(gm1)["Age20-29"] <- 1.245
+estimatesfixedeffects <- fixef(gm1)
+exp(estimatesfixedeffects)
+```
+
+A medium effect size size would be equivalent to an estimate of 1.245.
+
+```{r verynze_109, echo=T, eval = T, message=FALSE, warning=FALSE}
+# set seed for replicability
+set.seed(2019121203)
+fixef(gm1)["Age20-29"] <- 1.245
+powerSim(gm1, fixed("Age20-29", "z"), nsim=100)
+```
+
+Our model would detect a medium effect in 100 percent of cases. We will now check the effect size at which our model would find an effect with 80 percent accuracy.
+
+```{r verynze_110, echo=T, eval = T, message=FALSE, warning=FALSE}
+# set seed for replicability
+set.seed(2019121204)
+fixef(gm1)["Age20-29"] <- 0.68 # 0.68 = 80%; 0.65 = 75%, 0.7 = 84%, 0.8 = 89%
+powerSim(gm1, fixed("Age20-29", "z"), nsim=100)
+```
+
+Based on the sample size in the present study, the analysis would find a mid-range small effect with an effect size of 1.97 OR (see below) or a 0.68 Estimate with an accuracy of 80 percent. The sample size in this study is thus large and robust enough to detect even mid-range small effects with a sufficient accuracy. Mid and large sized effects are detected in 100 percent of cases given the sample size at hand.
+
+```{r verynze_111, echo=T, eval = T, message=FALSE, warning=FALSE}
+exp(fixef(gm1))
+```
+
+After confirming that the samle size is sufficient for our analysis, we can summarize the results of the analysis.
+
+```{r verynze_112, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load function for regression table summary
+source("D:\\R/meblr.summary.R")
+# set up summary table
+meblrm_ampwsc <- meblrm.summary(m0.glm, m3.glm, m0.glmer, m3.glmer, verywscnew$very) 
+# save results to disc
+write.table(meblrm_ampwsc, "datatables/meblrm_ampwsc.txt", sep="\t")
+# inspect result summary
+meblrm_ampwsc
+```
+
+
+We also check the Anova summary to see if predictors, rather than individual predictor levels, are significant and to what extent.
+
+```{r verynze_113, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load function
+library(car)
+meblrm_ampwsc_Anova <- Anova(m3.glmer, type = "III", test = "Chi")
+# save results to disc
+write.table(meblrm_ampwsc_Anova, "datatables/meblrm_ampwsc_Anova.txt", sep="\t")
+# inspect results in Anova style
+meblrm_ampwsc_Anova
+```
+
+We will also inspect the effects of the individual predcitors. We begin with Age.
+
+```{r verynze_114, echo=T, eval = T, message=FALSE, warning=FALSE}
+effectage <- anova(m1.glmer, m0.glmer, test = "Chi")
+effectage
+```
+
+Now, we inspect the effects of Emotionality.
+
+```{r verynze_115, echo=T, eval = T, message=FALSE, warning=FALSE}
+effectemotionality <- anova(m3.glmer, m1.glmer, test = "Chi")
+```
+
+In a next step, we create a summary of the model fitting process.
+
+```{r verynze_115, echo=T, eval = T, message=FALSE, warning=FALSE}
+# use customized model comparison function
+# create compariveryns
+m1m0 <- anova(m0.glmer, m1.glmer, test = "Chi")
+m2m1 <- anova(m2.glmer, m1.glmer, test = "Chi")
+m3m1 <- anova(m3.glmer, m1.glmer, test = "Chi")
+m4m3 <- anova(m4.glmer, m3.glmer, test = "Chi")
+m5m3 <- anova(m5.glmer, m3.glmer, test = "Chi")
+m6m3 <- anova(m6.glmer, m3.glmer, test = "Chi")
+m7m3 <- anova(m7.glmer, m3.glmer, test = "Chi")
+m8m3 <- anova(m8.glmer, m3.glmer, test = "Chi")
+m11m3 <- anova(m11.glmer, m3.glmer, test = "Chi")
+m14m3 <- anova(m14.glmer, m3.glmer, test = "Chi")
+m18m3 <- anova(m18.glmer, m3.glmer, test = "Chi")
+m20m3 <- anova(m20.glmer, m3.glmer, test = "Chi")
+m27m3 <- anova(m27.glmer, m3.glmer, test = "Chi")
+m28m3 <- anova(m28.glmer, m3.glmer, test = "Chi")
+m29m3 <- anova(m29.glmer, m3.glmer, test = "Chi")
+m30m3 <- anova(m30.glmer, m3.glmer, test = "Chi")
+m31m3 <- anova(m31.glmer, m3.glmer, test = "Chi")
+m34m3 <- anova(m34.glmer, m3.glmer, test = "Chi")
+m35m3 <- anova(m35.glmer, m3.glmer, test = "Chi")
+m36m3 <- anova(m36.glmer, m3.glmer, test = "Chi")
+# create a list of the model compariveryns
+mdlcmp <- list(m1m0, m2m1, m3m1, m4m3, m5m3, m6m3, m7m3, m8m3, 
+               m11m3, m14m3, m18m3, m20m3, m27m3, m28m3, m29m3, 
+               m30m3, m31m3, m34m3, m35m3, m36m3)
+# load function
+source("D:\\R/ModelFittingSummarySWSU.R") # for Mixed Effects Model fitting (step-wise step-up): Binary Logistic Mixed Effects Models
+# apply function
+mdl.cmp.glmersc.swsu.dm <- mdl.fttng.swsu(mdlcmp)
+# save comparisons to disc
+write.table(mdl.cmp.glmersc.swsu.dm, "datatables/mdl_cmp_glmersc_swsu_verywscnew.txt", sep="\t")
+# inspect output
+mdl.cmp.glmersc.swsu.dm
+```
+
+In a next step, we perform Post-hoc analysis by using post-hoc Turkey tests to check which vpredictor levels are significant compared to each other. We begin with individual age levels.
+
+```{r verynze_116, echo=T, eval = T, message=FALSE, warning=FALSE}
+library (multcomp)
+summary(glht(m3.glmer, mcp(Age="Tukey")))
+```
+
+We now proceed to check differences among Emotionality levels.
+
+```{r verynze_117, echo=T, eval = T, message=FALSE, warning=FALSE}
+summary(glht(m3.glmer, mcp(Emotionality="Tukey")))
+```
+
+We now check the prediction accuracy of the final minimal model.
+
+```{r verynze_118, echo=T, eval = T, message=FALSE, warning=FALSE}
+# predict probs of nativelike for effects
+verywscnew$PredictedFrequency <- predict(m3.glmer, verywscnew, type="response")
+#summary(verywscnew$PredictedFrequency)
+# create response variable
+verywscnew$PredictedResponse <- ifelse(verywscnew$PredictedFrequency > .5, "very", "other")
+#summary(verywscnew$PredictedResponse)
+# load library
+library(caret)
+# create confusion matrix
+confusionMatrix(as.factor(verywscnew$PredictedResponse), as.factor(verywscnew$very))
+```
+
+We now turn to the visualization of the effecst of the final minimal model. We will vizualize the effects by plotting the predictions fro the different predictor levels. We begin with visualizing the effect of Emotionality.
+
+```{r verynze_119, echo=T, eval = T, message=FALSE, warning=FALSE}
+# prepare plot data (pd) 
+pd <- verywscnew
+
+# effect emotionality
+p5 <- ggplot(pd, aes(x = Emotionality, y = PredictedFrequency)) +
+  stat_summary(fun.y = mean, geom = "point") +          
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.2) + 
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_set(theme_bw(base_size = 20)) +
+    theme(legend.position="none", 
+        axis.text.x = element_text(size=15),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  labs(x = "Emotionality", y = "Predicted probability\nof very") +
+  ggsave(file = paste(imageDirectory,"PredictedEmotionality.png",sep="/"), 
+       height = 5,  width = 7,  dpi = 320)
+p5
+```
+
+We now turn to the visualization of the age effect.
+
+```{r verynze_120, echo=T, eval = T, message=FALSE, warning=FALSE}
+# convert Age column
+Agelbs <- c("16-19", "20-29", "30-39", "40-49", "50-59", "60+")
+pd$Age <- ifelse(pd$Age == "16-19", 6,
+                 ifelse(pd$Age == "20-29", 5,
+                        ifelse(pd$Age == "30-39", 4, 
+                               ifelse(pd$Age == "40-49", 3, 
+                                      ifelse(pd$Age == "50-59", 2, 
+                                             ifelse(pd$Age == "60+", 1, pd$Age))))))
+pd$Age<- as.numeric(pd$Age)
+# effect age
+p6 <- ggplot(pd, aes(x = Age, y = PredictedFrequency)) +
+  geom_smooth(aes(y = PredictedFrequency, x = Age), 
+              colour="black", size=1, se = T, method = "loess") +
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_set(theme_light(base_size = 15)) +
+  theme(legend.position="none", 
+        axis.text.x = element_text(size=15),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  labs(x = "Frequency of adj. type", y = "Predicted probability\nof very") +
+  scale_x_continuous(name = "Age",
+                     breaks = c(1, 2, 3, 4, 5, 6),
+                     labels=rev(Agelbs))
+ggsave(file = paste(imageDirectory,"PredictedAge.png",sep="/"), 
+       height = 5,  width = 7,  dpi = 320)
+p6
+```
+
+In addition to plotting the predicted values of the predictor levels, we also plot the effects directly using the effects package. 
+
+```{r verynze_121, echo=T, eval = T, message=FALSE, warning=FALSE}
+library(effects)
+png("images/effectsfinalmodel.png",  width = 960, height = 480) 
+plot(allEffects(m3.glmer), type="response", ylim=c(0,1), grid=TRUE, 
+     lines = list(col="black",
+                  lty = 1,
+                  confint=list(style="bars",
+                               col = "grey80")), 
+     ylab = "Prob (very)")
+dev.off()
+plot(allEffects(m3.glmer), type="response", ylim=c(0,1), grid=TRUE, 
+     lines = list(col="black",
+                  lty = 1,
+                  confint=list(style="bars",
+                               col = "grey80")), 
+     ylab = "Prob (very)")
+```
+
+In a next step, we cerate the publication visualization which combines the effects of Emotionality and Age in a single effect plot by generating new data to which the predictions are added and then plotted.
+
+```{r verynze_122, echo=T, eval = T, message=FALSE, warning=FALSE}
+randomtb <- ranef(m3.glmer)
+rndmadj <- as.vector(unlist(randomtb$`Adjective`))
+adj <- as.vector(unlist(rownames(randomtb$`Adjective`)))
+rndmadjtb <- data.frame(adj, rndmadj)
+colnames(rndmadjtb) <- c("Adjective", "Intercept")
+rndmadjtb <- rndmadjtb[order(rndmadjtb$Intercept, decreasing = T),]
+rndmadjtb
+
+p7 <- ggplot(rndmadjtb, aes(Adjective, Intercept)) +
+  geom_point(aes(reorder(Adjective, -Intercept, fun = Intercept), y=Intercept)) +
+  coord_cartesian(ylim = c(-1.5, 1.5)) +
+  theme_set(theme_bw(base_size = 15)) +
+  theme(legend.position="none", 
+        axis.text.x = element_text(size=15, angle=90),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  scale_x_discrete(breaks = rndmadjtb$Adjective[seq(1,length(rndmadjtb$Adjective),9)]) +
+  labs(x = "Adjective type \n(only selected labels displayed)", y = "Adjustment to Intercept")
+ggsave(file = paste(imageDirectory,"RanAdjective.png",sep="/"), 
+       height = 5,  width = 7.5,  dpi = 320)
+# activate (remove #) to show
+p7
+```
+
+In a final step, we create a table which shows the sample size at different stages of the analysis. In a first step, we extract the number of adjectives.
+
+```{r verynze_123, echo=T, eval = T, message=FALSE, warning=FALSE}
+# load data sets
+raw <- read.delim("datatables/wscadjdf.txt", sep = "\t", header = T, quote = "\"", skipNul = T)
+processed <- read.delim("datatables/ampwsc.txt", sep = "\t", header = T, quote = "\"", skipNul = T)
+processed <- processed %>%
+  dplyr::select(-AgeNumeric) %>%
+  dplyr::mutate(FileSpeaker = paste(File, Speaker, sep = ""))  %>%
+  dplyr::mutate(very = ifelse(Variant == "very", "very", "other")) %>%
+  na.omit()
+statz1 <- read.delim("datatables/ampwsc.txt", sep = "\t", header = T, quote = "\"", skipNul = T)
+statz1 <- statz1 %>%
+  dplyr::filter(Variant != "0") %>%
+  dplyr::select(-AgeNumeric) %>%
+  dplyr::mutate(FileSpeaker = paste(File, Speaker, sep = ""))  %>%
+  dplyr::mutate(very = ifelse(Variant == "very", "very", "other")) %>%
+  na.omit()
+cutoff <- 0.007
+statz2 <- statz1[-(which(verywsc$cooksdistance > cutoff)),]
+# extract number of adjectives
+token_raw <- nrow(raw)
+token_processed <- nrow(processed)
+token_statz1 <- nrow(statz1)
+token_statz2 <- nrow(statz2)
+# create vector
+adjsN <- c(token_raw, token_processed, token_statz1, token_statz2) 
+# inspect vector
+adjsN
+```
+
+Now, we extract the number of speakers.
+
+```{r verynze_124, echo=T, eval = T, message=FALSE, warning=FALSE}
+# extract number of speakers
+speaker_raw <- length(table(paste(raw$File, raw$Speaker, sep = "")))
+speaker_processed <- length(table(processed$FileSpeaker))
+speaker_statz1 <- length(table(statz1$FileSpeaker))
+speaker_stat2 <- length(table(statz2$FileSpeaker))
+# create vector
+spkrsN <- c(speaker_raw, speaker_processed, speaker_statz1, speaker_stat2) 
+# inspect vector
+spkrsN
+```
+
+Now, we extract the number of amplified slots.
+
+```{r verynze_125, echo=T, eval = T, message=FALSE, warning=FALSE}
+# extract number of amplified slots
+# we first need to determine the number of amplifier slots for the raw data
+# vecttor of amplifiers
+# define amplifiers
+amplifiers <- c("absolutely", "actually", "aggressively", 
+                "amazingly", "appallingly", "awful", "awfully", 
+                "badly", "bloody", "certainly", "clearly",
+                "complete", "dead", "completely", "considerably", 
+                "crazy", "decidedly", "definitely",  "distinctly", 
+                "dreadfully", "enormously", "entirely", "especially", 
+                "exactly", "exceedingly", "exceptionally", 
+                "excruciatingly", "extraordinarily", "extremely",
+                "fiercely", "firmly", "frightfully", "fucking", 
+                "fully", "genuinely", "greatly",
+                "grossly", "heavily", "highly", "hopelessly", 
+                "horrendously", "hugely",
+                "immediately", "immensely", "incredibly", 
+                "infinitely", "intensely", "irrevocably",
+                "mad", "mega", "mighty", "most", "much", 
+                "obviously", "openly", "overwhelmingly", "particularly", 
+                "perfectly", "plenty", "positively", "precisely", 
+                "pretty", "profoundly", "purely", 
+                #"quite", 
+                "real", "really", "remarkably", "seriously", 
+                "shocking",   "significant", "significantly", "so", 
+                "specially", "specifically", "strikingly",
+                "strongly", "substantially", "super", "surely", 
+                "terribly", "terrifically", 
+                #"too",
+                "total", "totally", "traditionally", "true", 
+                "truly", "ultra", "utterly", "very",
+                "viciously", 
+                #"well", 
+                "wholly", "wicked", "wildly")
+raw <- raw %>%
+  dplyr::mutate(Variant = str_replace_all(tolower(Variant), "/.*", "")) %>%
+  dplyr::mutate(Amplified = ifelse(Variant %in% amplifiers, 1, 0))
+# extract number of amplified slots
+amp_raw <- sum(raw$Amplified)
+amp_processed <- sum(processed$Amplified)
+amp_statz1 <- sum(statz1$Amplified)
+amp_stat2 <- sum(statz2$Amplified)
+# create vector
+ampN <- c(amp_raw, amp_processed, token_statz1, token_statz2) 
+# inspect vector
+ampN
+```
+
+Now, we extract the number of amplified slots.
+
+```{r verynze_126, echo=T, eval = T, message=FALSE, warning=FALSE}
+# create table from results
+Table0 <- data.frame(spkrsN, adjsN, ampN) 
+Table0 <- Table0 %>%
+  dplyr::rename(Speakers = spkrsN, AdjectiveToken = adjsN, 
+                AmplifiedAdjectives = ampN) %>%
+  dplyr::mutate(Percent = round(AmplifiedAdjectives/AdjectiveToken*100, 1))
+rownames(Table0) <- c("raw data",  "processed data", "variable context data", 
+                      "variable context data without outliers")
+# save table to disc
+write.table(Table0, "datatables/Table0.txt", sep = "\t", row.names = T, col.names = T, quote = F)
+# inspect vector
+Table0
+```
+
+We now have to recreate Table 2 bacuse we had to remove outliers during the model fitting.
+
+```{r verynze_127, echo=T, eval = T, message=FALSE, warning=FALSE}
+# create table
+Table2 <- statz2 %>%
+  dplyr::select(Age, Gender, FileSpeaker, very)  %>%
+  dplyr::group_by(Age, Gender) %>%
+  dplyr::summarize(Speakers = length(names(table(FileSpeaker))),
+                   AdjectiveSlots = n(),
+                   very = table(very)[2]) %>%
+  dplyr::mutate(Percent = round(very/AdjectiveSlots*100, 2))
+Table2 <- rbind(as.data.frame(Table2), c("", "", sum(Table2$Speakers), 
+                  sum(Table2$AdjectiveSlots), 
+                  sum(Table2$very), round(mean(Table2$Percent), 2)))
+# save data to disc
+write.table(Table2, "datatables/Table2.txt", sep = "\t", row.names = F)
+# inspect Table2
+Table2
+```
+
+
+```{r verynze_128, echo=T, eval = T, message=FALSE, warning=FALSE}
+Varianttbwsc <- table(processed$Variant)
+Varianttbwsc <- Varianttbwsc[order(table(processed$Variant), decreasing = T)]
+Variantnames <- as.vector(names(Varianttbwsc))
+Variantn <- as.vector(Varianttbwsc)
+Variantprcnt <- round(Variantn/sum(Variantn)*100, 2)
+Variantprcnt2 <-  c(0, round(Variantn[2:length(Variantn)]/sum(Variantn[2:length(Variantn)])*100, 2))
+Table3 <- data.frame(Variantnames, Variantn, Variantprcnt, Variantprcnt2)
+colnames(Table3) <- c("Variant", "TokenFrequency", "PercentageSlots", "PercentAgeAmplifiedensifiers")
+Table3 <- rbind(Table3, c("Total", sum(as.vector(Table3$TokenFrequency)), 
+                          "", ""))
+rownames(Table3) <- NULL
+# save data to disc
+write.table(Table3, "datatables/Table3.txt", sep = "\t", row.names = F)
+# inspect data
+Table3
+```
+
+
+We have reached the end of the analysis of lexical errors revised incorrectly without corpus data.
+
+# References
+
